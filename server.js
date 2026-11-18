@@ -1,7 +1,12 @@
+
 require("dotenv").config();
 
 const express = require("express");
-const { AccessToken } = require("livekit-server-sdk");
+const {
+    AccessToken,
+    RoomServiceClient
+} = require("livekit-server-sdk");
+
 const { randomUUID } = require("crypto");
 
 const app = express();
@@ -10,6 +15,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const ROOM_NAME = "sasha-fm";
+const BROADCASTER_ID = "sasha-fm-broadcaster";
 
 // Check that all credentials are present.
 const requiredEnv = [
@@ -25,7 +31,18 @@ for (const key of requiredEnv) {
     }
 }
 
-// Simple health check.
+// Configure LiveKit room service.
+const livekitHttpUrl = process.env.LIVEKIT_URL
+    .replace(/^wss:/, "https:")
+    .replace(/^ws:/, "http:");
+
+const roomService = new RoomServiceClient(
+    livekitHttpUrl,
+    process.env.LIVEKIT_API_KEY,
+    process.env.LIVEKIT_API_SECRET
+);
+
+// Health check.
 app.get("/health", (req, res) => {
     res.json({
         status: "online",
@@ -33,7 +50,34 @@ app.get("/health", (req, res) => {
     });
 });
 
-// Generate a LiveKit access token.
+// Check whether the broadcaster is connected.
+app.get("/status", async (req, res) => {
+    try {
+        const participants = await roomService.listParticipants(
+            ROOM_NAME
+        );
+
+        const broadcasting = participants.some(
+            participant =>
+                participant.identity === BROADCASTER_ID
+        );
+
+        res.json({
+            broadcasting,
+            room: ROOM_NAME
+        });
+
+    } catch (error) {
+        console.error("Broadcast status check failed:", error);
+
+        res.status(503).json({
+            broadcasting: false,
+            error: "Could not check broadcaster status"
+        });
+    }
+});
+
+// Generate LiveKit access tokens.
 app.post("/token", async (req, res) => {
     try {
         const { role } = req.body;
@@ -45,7 +89,7 @@ app.post("/token", async (req, res) => {
         }
 
         const identity = role === "broadcaster"
-            ? "sasha-fm-broadcaster"
+            ? BROADCASTER_ID
             : `listener-${randomUUID()}`;
 
         const token = new AccessToken(
@@ -83,5 +127,7 @@ app.post("/token", async (req, res) => {
 });
 
 app.listen(PORT, "127.0.0.1", () => {
-    console.log(`SASHA.FM token server running on http://127.0.0.1:${PORT}`);
+    console.log(
+        `SASHA.FM token server running on http://127.0.0.1:${PORT}`
+    );
 });
