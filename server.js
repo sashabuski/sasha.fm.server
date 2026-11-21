@@ -51,6 +51,8 @@ app.get("/health", (req, res) => {
 });
 
 // Check whether the broadcaster is connected.
+
+// Check whether the broadcaster is connected.
 app.get("/status", async (req, res) => {
     try {
         const participants = await roomService.listParticipants(
@@ -68,6 +70,15 @@ app.get("/status", async (req, res) => {
         });
 
     } catch (error) {
+
+        // A room that doesn't exist simply means nobody is broadcasting.
+        if (error.code === "not_found" || error.status === 404) {
+            return res.json({
+                broadcasting: false,
+                room: ROOM_NAME
+            });
+        }
+
         console.error("Broadcast status check failed:", error);
 
         res.status(503).json({
@@ -76,6 +87,7 @@ app.get("/status", async (req, res) => {
         });
     }
 });
+
 
 // Generate LiveKit access tokens.
 app.post("/token", async (req, res) => {
